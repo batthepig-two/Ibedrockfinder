@@ -223,8 +223,8 @@ int main(void) {
     printf("=== Ibedrockfinder ===  single-file C bedrock pattern finder\n");
     printf("    by Batthepig                                              \n\n");
 
-    /* 1) pattern */
-    Pattern base;
+    /* 1) pattern  (static: Pattern is ~13 KB; a-Shell's WASM stack is tiny) */
+    static Pattern base;
     read_pattern(&base);
 
     /* 2) edition */
@@ -269,8 +269,8 @@ int main(void) {
     }
     double pB = threshold / (double)0x1000000;
 
-    /* 6) variants */
-    Pattern variants[MAX_VARIANTS];
+    /* 6) variants  (static: ~100 KB total — keep off the WASM stack) */
+    static Pattern variants[MAX_VARIANTS];
     int nv = 0;
     if (rotations) {
         for (int o = 0; o < 8; o++) {
