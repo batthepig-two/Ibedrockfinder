@@ -305,7 +305,7 @@ int main(void) {
         total_anchors += xr * zr;
     }
 
-    printf("\nSearching %lld anchors across %d orientation(s)... ",
+    printf("\nSearching %lld anchors across %d orientation(s)...\n\n",
            (long long)total_anchors, nv);
     fflush(stdout);
 
@@ -313,8 +313,10 @@ int main(void) {
     Heap top; heap_init(&top, max_results);
     double t0 = now_sec();
     int64_t scanned = 0;
-    int64_t dot_step = total_anchors / 40; if (dot_step < 1) dot_step = 1;
-    int64_t next_dot = dot_step;
+    /* Refresh progress line ~5x per second. */
+    int64_t step = total_anchors / 200; if (step < 100000) step = 100000;
+    int64_t next_check = step;
+    double  last_print = t0;
 
     for (int p = 0; p < nv; p++) {
         Pattern *pat = &variants[p];
@@ -342,14 +344,31 @@ int main(void) {
                 }
             }
             scanned += (z_end - z_min + 1);
-            if (scanned >= next_dot) {
-                fputc('.', stdout); fflush(stdout);
-                next_dot += dot_step;
+            if (scanned >= next_check) {
+                next_check = scanned + step;
+                double now = now_sec();
+                if (now - last_print >= 0.2) {
+                    last_print = now;
+                    double elapsed = now - t0;
+                    double frac = (double)scanned / (double)total_anchors;
+                    if (frac > 1.0) frac = 1.0;
+                    double eta = frac > 0 ? elapsed * (1.0 / frac - 1.0) : 0.0;
+                    int pct = (int)(frac * 100.0 + 0.5);
+                    int bars = (int)(frac * 30.0 + 0.5);
+                    char bar[32];
+                    for (int b = 0; b < 30; b++) bar[b] = b < bars ? '#' : '-';
+                    bar[30] = 0;
+                    printf("\r  [%s] %3d%%  elapsed %6.1fs  eta %6.1fs  hits %d   ",
+                           bar, pct, elapsed, eta, top.n);
+                    fflush(stdout);
+                }
             }
         }
     }
     double dt = now_sec() - t0;
-    printf("\n\nFinished in %.2fs   (%.2f M anchors/sec)\n",
+    printf("\r  [##############################] 100%%  elapsed %6.1fs  eta    0.0s  hits %d   \n\n",
+           dt, top.n);
+    printf("Finished in %.2fs   (%.2f M anchors/sec)\n",
            dt, dt > 0 ? scanned / dt / 1e6 : 0.0);
 
     /* 9) sort & print */
