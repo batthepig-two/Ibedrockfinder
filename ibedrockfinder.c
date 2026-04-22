@@ -100,17 +100,16 @@ static void prompt_str(const char *msg, const char *defv,
     if (!out[0]) { strncpy(out, defv, cap); out[cap-1] = 0; }
 }
 
-/* ---- pattern input ---- */
-static void read_pattern(Pattern *p) {
-    p->w = prompt_int("Pattern width",  2);
-    p->h = prompt_int("Pattern height", 16);
+/* ---- pattern row input (size already chosen) ---- */
+static void read_pattern_rows(Pattern *p) {
     if (p->w < 1) p->w = 1;
     if (p->h < 1) p->h = 1;
     if (p->w > MAX_PATTERN) p->w = MAX_PATTERN;
     if (p->h > MAX_PATTERN) p->h = MAX_PATTERN;
-    printf("\nEnter %d row(s) of width %d.  '#'=bedrock, '.'=stone, '?'=unknown.\n",
+    printf("\nEnter %d row(s) of width %d.  '1'=bedrock, '0'=stone, '?'=unknown.\n",
            p->h, p->w);
-    printf("Spaces ignored. Short rows padded with '?'. Press Enter for all-unknown row.\n\n");
+    printf("(You can also use '#' for bedrock and '.' for stone.)\n");
+    printf("Spaces ignored. Short rows padded with '?'. Press Enter for an all-unknown row.\n\n");
     for (int z = 0; z < p->h; z++) {
         char line[256];
         printf("row %2d: ", z); fflush(stdout);
@@ -223,25 +222,30 @@ int main(void) {
     printf("=== Ibedrockfinder ===  single-file C bedrock pattern finder\n");
     printf("    by Batthepig                                              \n\n");
 
-    /* 1) pattern  (static: Pattern is ~13 KB; a-Shell's WASM stack is tiny) */
-    static Pattern base;
-    read_pattern(&base);
+    /* 1) Y level + dimension first (Y is what you see on F3 in-game) */
+    int y = prompt_int("Y level", -60);
+    char dimS[24];
+    prompt_str("Dimension (overworld_floor/nether_floor/nether_ceiling)",
+               "overworld_floor", dimS, sizeof dimS);
+    int dim = 0;
+    if      (!strcmp(dimS, "nether_floor"))   dim = 1;
+    else if (!strcmp(dimS, "nether_ceiling")) dim = 2;
 
-    /* 2) edition */
+    /* 2) pattern size + rows
+     *    "length" = number of rows (Z direction),
+     *    "width"  = number of columns (X direction).
+     *    static: Pattern is ~13 KB and a-Shell's WASM stack is tiny. */
+    static Pattern base;
+    base.w = prompt_int("Pattern width  (X size)", 2);
+    base.h = prompt_int("Pattern length (Z size)", 16);
+    read_pattern_rows(&base);
+
+    /* 3) edition */
     char edS[16];
     prompt_str("\nEdition (java/bedrock)", "java", edS, sizeof edS);
     int edition = (!strcmp(edS, "bedrock") || !strcmp(edS, "b")) ? 1 : 0;
     int64_t seed = 0;
     if (edition == 1) seed = prompt_i64("Seed", 0);
-
-    /* 3) dimension + Y */
-    char dimS[24];
-    prompt_str("Dim (overworld_floor/nether_floor/nether_ceiling)",
-               "overworld_floor", dimS, sizeof dimS);
-    int dim = 0;
-    if      (!strcmp(dimS, "nether_floor"))   dim = 1;
-    else if (!strcmp(dimS, "nether_ceiling")) dim = 2;
-    int y = prompt_int("Y level", -60);
 
     /* 4) area */
     int cx = prompt_int("Center X", 0);
