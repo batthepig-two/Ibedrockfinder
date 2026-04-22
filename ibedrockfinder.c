@@ -8,15 +8,25 @@
  * Run:
  *     ./ibedrockfinder
  *
- * The program prompts for the pattern (rows of '#' bedrock, '.' stone,
- * '?' unknown), the edition / dimension / Y level, the search center and
- * radius, and whether to match all 8 rotations + reflections, then scans
- * the bedrock layer as fast as a single CPU thread can — early-exiting
- * each anchor on the rarest cell first to maximize cull rate, using
- * pure 32-bit integer math identical to the reference web app's hash.
+ * Algorithms:
  *
- * Hash function is bit-for-bit compatible with the JS version, so hits
- * agree exactly between this CLI and the browser.
+ *   Java Edition 1.18+   — REAL world-gen algorithm.
+ *     Uses Mojang's xoroshiro128++ XoroshiroPositionalRandomFactory
+ *     derived from the world seed XORed with the MD5 of the salt
+ *     "minecraft:bedrock_floor" / "minecraft:bedrock_roof", combined
+ *     with the standard Mth.getSeed(x, y, z) position mixer.  Constants
+ *     and seed pipeline match the cubiomes reference library, so hits
+ *     should match what you actually see in your Java world.
+ *
+ *   Bedrock Edition       — APPROXIMATE.
+ *     Mojang has not published the C++ Bedrock Edition world-gen code,
+ *     and there is no community-reverse-engineered reference of the same
+ *     quality as cubiomes.  This program uses a fast 64-bit-seed-mixed
+ *     positional hash with the same per-layer probabilities (5/5, 4/5,
+ *     3/5, 2/5, 1/5).  The pattern statistics (frequency of any given
+ *     shape) match the real game, but exact coordinates of any specific
+ *     hit will NOT match a Bedrock Edition world.  Use Java mode for
+ *     coordinate-accurate searches.
  */
 
 #define _GNU_SOURCE
@@ -34,34 +44,124 @@
 #define MAX_KNOWN    (MAX_PATTERN * MAX_PATTERN)
 #define MAX_VARIANTS 8
 
-/* ---- hash mixers (match JS reference exactly) ---- */
-static inline uint32_t mix_java(int32_t x, int32_t y, int32_t z) {
-    uint32_t h = (uint32_t)x * 0x85ebca6bu;
-    h ^= (uint32_t)z * 0xc2b2ae35u;
-    h ^= (uint32_t)y * 0x27d4eb2fu;
-    h ^= h >> 16;
-    h *= 0x7feb352du;
-    h ^= h >> 15;
-    h *= 0x846ca68bu;
-    h ^= h >> 16;
-    return h;
-}
-static inline uint32_t mix_be(int32_t x, int32_t y, int32_t z,
-                              uint32_t lo, uint32_t hi) {
-    uint32_t h = (uint32_t)x * 0x85ebca6bu;
-    h ^= (uint32_t)z * 0xc2b2ae35u;
-    h ^= (uint32_t)y * 0x27d4eb2fu;
-    h ^= lo;
-    h ^= h >> 16;
-    h *= 0x7feb352du;
-    h ^= hi;
-    h ^= h >> 15;
-    h *= 0x846ca68bu;
-    h ^= h >> 16;
-    return h;
+/* ============================================================ */
+/*  Java Edition 1.18+ — real xoroshiro128++ positional random  */
+/* ============================================================ */
+
+/* MD5("minecraft:bedrock_floor") = bbf7928b7bf1d285c4dc7cf90e1b3b94
+ * MD5("minecraft:bedrock_roof")  = 8ebd4a1d131d71ccc984cfbb684a26c4
+ *
+ * Mojang treats the first 8 bytes of the MD5 as a big-endian uint64
+ * which XORs the factory's seed-low, and the next 8 bytes the same way
+ * for seed-high.  (Same convention as cubiomes' md5_octave table.) */
+#define MD5_BEDROCK_FLOOR_LO  0xbbf7928b7bf1d285ULL
+#define MD5_BEDROCK_FLOOR_HI  0xc4dc7cf90e1b3b94ULL
+#define MD5_BEDROCK_ROOF_LO   0x8ebd4a1d131d71ccULL
+#define MD5_BEDROCK_ROOF_HI   0xc984cfbb684a26c4ULL
+
+typedef struct { uint64_t lo, hi; } Xoro;
+
+static inline uint64_t rotl64(uint64_t x, int b) {
+    return (x << b) | (x >> (64 - b));
 }
 
-/* ---- types ---- */
+/* Xoroshiro128++ seeded constructor with stafford13 mix
+ * (matches Mojang's XoroshiroRandomSource(long) constructor and
+ *  cubiomes' xSetSeed in rng.h). */
+static inline void xoro_seed(Xoro *xr, uint64_t value) {
+    const uint64_t XL = 0x9e3779b97f4a7c15ULL;
+    const uint64_t XH = 0x6a09e667f3bcc909ULL;
+    const uint64_t A  = 0xbf58476d1ce4e5b9ULL;
+    const uint64_t B  = 0x94d049bb133111ebULL;
+    uint64_t l = value ^ XH;
+    uint64_t h = l + XL;
+    l = (l ^ (l >> 30)) * A;
+    h = (h ^ (h >> 30)) * A;
+    l = (l ^ (l >> 27)) * B;
+    h = (h ^ (h >> 27)) * B;
+    l = l ^ (l >> 31);
+    h = h ^ (h >> 31);
+    xr->lo = l;
+    xr->hi = h;
+}
+
+static inline uint64_t xoro_next(Xoro *xr) {
+    uint64_t l = xr->lo;
+    uint64_t h = xr->hi;
+    uint64_t n = rotl64(l + h, 17) + l;
+    h ^= l;
+    xr->lo = rotl64(l, 49) ^ h ^ (h << 21);
+    xr->hi = rotl64(h, 28);
+    return n;
+}
+
+/* Mojang's Mth.getSeed(x, y, z): coordinate hash used by every
+ * XoroshiroPositionalRandom .at(x, y, z) call. */
+static inline int64_t mc_get_pos_seed(int32_t x, int32_t y, int32_t z) {
+    /* x * 3129871 is performed in 32-bit signed (allowed to wrap) */
+    int32_t xm = (int32_t)((uint32_t)x * 3129871u);
+    uint64_t lu = (uint64_t)((int64_t)xm
+                           ^ ((int64_t)z * 116129781LL)
+                           ^ (int64_t)y);
+    lu = lu * lu * 42317861ULL + lu * 11ULL;
+    return (int64_t)lu >> 16;   /* arithmetic right shift */
+}
+
+/* World positional factory (lo, hi) derived from the world seed.
+ * Mojang: new XoroshiroRandomSource(seed).forkPositional()
+ *      → (nextLong(), nextLong()) of that source. */
+static void java_world_factory(uint64_t world_seed,
+                               uint64_t *out_lo, uint64_t *out_hi) {
+    Xoro xr;
+    xoro_seed(&xr, world_seed);
+    *out_lo = xoro_next(&xr);
+    *out_hi = xoro_next(&xr);
+}
+
+/* fromHashOf("minecraft:bedrock_floor") on a positional factory:
+ * XOR the factory's (lo, hi) with the MD5 halves of the salt. */
+static inline void java_apply_salt(uint64_t world_lo, uint64_t world_hi,
+                                   uint64_t md5_lo, uint64_t md5_hi,
+                                   uint64_t *out_lo, uint64_t *out_hi) {
+    *out_lo = world_lo ^ md5_lo;
+    *out_hi = world_hi ^ md5_hi;
+}
+
+/* The bedrock test for one block at (x, y, z) under a salted positional
+ * factory.  Returns true iff the block would be bedrock when its
+ * nextFloat() (top 24 bits of next long) is below the threshold. */
+static inline bool is_bedrock_java(uint64_t f_lo, uint64_t f_hi,
+                                   int32_t x, int32_t y, int32_t z,
+                                   uint32_t threshold24) {
+    Xoro xr;
+    xr.lo = (uint64_t)mc_get_pos_seed(x, y, z) ^ f_lo;
+    xr.hi = f_hi;
+    uint32_t top24 = (uint32_t)(xoro_next(&xr) >> 40);
+    return top24 < threshold24;
+}
+
+/* ============================================================ */
+/*  Bedrock Edition — approximate (see file header)             */
+/* ============================================================ */
+static inline bool is_bedrock_be(int32_t x, int32_t y, int32_t z,
+                                 uint32_t seed_lo, uint32_t seed_hi,
+                                 uint32_t threshold24) {
+    uint32_t h = (uint32_t)x * 0x85ebca6bu;
+    h ^= (uint32_t)z * 0xc2b2ae35u;
+    h ^= (uint32_t)y * 0x27d4eb2fu;
+    h ^= seed_lo;
+    h ^= h >> 16;
+    h *= 0x7feb352du;
+    h ^= seed_hi;
+    h ^= h >> 15;
+    h *= 0x846ca68bu;
+    h ^= h >> 16;
+    return (h & 0xffffffu) < threshold24;
+}
+
+/* ============================================================ */
+/*  Pattern types                                               */
+/* ============================================================ */
 typedef struct { int dx, dz; uint8_t v; } Known;
 typedef struct {
     int w, h;
@@ -164,10 +264,7 @@ static void build_known(Pattern *p, double pB) {
         p->known[p->n_known++] = (Known){ x, z, v };
         if (v == 1) p->needs_b = true; else p->needs_s = true;
     }
-    /* sort by reject probability descending: cells that reject more often
-     * go first so the inner loop bails out faster on misses.
-     * P(reject | want bedrock) = 1 - pB.  P(reject | want stone) = pB.
-     * Bubble sort is fine (n is tiny). */
+    /* sort by reject probability descending */
     for (int i = 0; i < p->n_known; i++)
         for (int j = i + 1; j < p->n_known; j++) {
             double ri = p->known[i].v ? (1.0 - pB) : pB;
@@ -220,7 +317,9 @@ static double now_sec(void) {
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     printf("=== Ibedrockfinder ===  single-file C bedrock pattern finder\n");
-    printf("    by Batthepig                                              \n\n");
+    printf("    by Batthepig                                              \n");
+    printf("    Java mode = real Mojang xoroshiro128++ + bedrock-salt MD5\n");
+    printf("    Bedrock Edition mode = approximate (see source header)   \n\n");
 
     /* 1) Y level + dimension first (Y is what you see on F3 in-game) */
     int y = prompt_int("Y level", -60);
@@ -231,21 +330,17 @@ int main(void) {
     if      (!strcmp(dimS, "nether_floor"))   dim = 1;
     else if (!strcmp(dimS, "nether_ceiling")) dim = 2;
 
-    /* 2) pattern size + rows
-     *    "length" = number of rows (Z direction),
-     *    "width"  = number of columns (X direction).
-     *    static: Pattern is ~13 KB and a-Shell's WASM stack is tiny. */
+    /* 2) pattern size + rows */
     static Pattern base;
     base.w = prompt_int("Pattern width  (X size)", 2);
     base.h = prompt_int("Pattern length (Z size)", 16);
     read_pattern_rows(&base);
 
-    /* 3) edition */
+    /* 3) edition + seed (both editions are seed-dependent now) */
     char edS[16];
     prompt_str("\nEdition (java/bedrock)", "java", edS, sizeof edS);
     int edition = (!strcmp(edS, "bedrock") || !strcmp(edS, "b")) ? 1 : 0;
-    int64_t seed = 0;
-    if (edition == 1) seed = prompt_i64("Seed", 0);
+    int64_t seed = prompt_i64("World seed", 0);
 
     /* 4) area */
     int cx = prompt_int("Center X", 0);
@@ -288,13 +383,29 @@ int main(void) {
     }
     for (int i = 0; i < nv; i++) build_known(&variants[i], pB);
 
-    uint32_t seed_lo = (uint32_t)((uint64_t)seed & 0xffffffffu);
-    uint32_t seed_hi = (uint32_t)(((uint64_t)seed >> 32) & 0xffffffffu);
+    /* 7) precompute edition-specific PRNG state from seed */
+    uint64_t java_f_lo = 0, java_f_hi = 0;
+    if (edition == 0) {
+        uint64_t world_lo, world_hi;
+        java_world_factory((uint64_t)seed, &world_lo, &world_hi);
+        /* dim 2 (nether ceiling) uses bedrock_roof; floors use bedrock_floor */
+        if (dim == 2) {
+            java_apply_salt(world_lo, world_hi,
+                            MD5_BEDROCK_ROOF_LO, MD5_BEDROCK_ROOF_HI,
+                            &java_f_lo, &java_f_hi);
+        } else {
+            java_apply_salt(world_lo, world_hi,
+                            MD5_BEDROCK_FLOOR_LO, MD5_BEDROCK_FLOOR_HI,
+                            &java_f_lo, &java_f_hi);
+        }
+    }
+    uint32_t be_seed_lo = (uint32_t)((uint64_t)seed & 0xffffffffu);
+    uint32_t be_seed_hi = (uint32_t)(((uint64_t)seed >> 32) & 0xffffffffu);
 
     int x_min = cx - radius, x_max = cx + radius;
     int z_min = cz - radius, z_max = cz + radius;
 
-    /* 7) anchor count for progress */
+    /* 8) anchor count for progress */
     int64_t total_anchors = 0;
     for (int p = 0; p < nv; p++) {
         if (always_b && variants[p].needs_s) continue;
@@ -305,15 +416,21 @@ int main(void) {
         total_anchors += xr * zr;
     }
 
-    printf("\nSearching %lld anchors across %d orientation(s)...\n\n",
+    printf("\n%s mode | seed %lld | dim %s | Y %d (layer %s) | %lld anchors x %d orient(s)\n",
+           edition == 0 ? "Java (real PRNG)" : "Bedrock Edition (approximate)",
+           (long long)seed, dimS, y,
+           always_b ? "0 always-bedrock" : never_b ? "out-of-range" : "valid",
            (long long)total_anchors, nv);
+    if (edition == 1) {
+        printf("Note: Bedrock Edition results are pattern-statistical, not coordinate-exact.\n");
+    }
+    printf("\n");
     fflush(stdout);
 
-    /* 8) the inner loop */
+    /* 9) the inner loop */
     Heap top; heap_init(&top, max_results);
     double t0 = now_sec();
     int64_t scanned = 0;
-    /* Refresh progress line ~5x per second. */
     int64_t step = total_anchors / 200; if (step < 100000) step = 100000;
     int64_t next_check = step;
     double  last_print = t0;
@@ -331,10 +448,9 @@ int main(void) {
                 bool ok = true;
                 for (int i = 0; i < n; i++) {
                     int ax = x + kc[i].dx, az = z + kc[i].dz;
-                    uint32_t hh = (edition == 0)
-                        ? mix_java(ax, y, az)
-                        : mix_be(ax, y, az, seed_lo, seed_hi);
-                    bool isB = ((hh & 0xffffffu) < threshold);
+                    bool isB = (edition == 0)
+                        ? is_bedrock_java(java_f_lo, java_f_hi, ax, y, az, threshold)
+                        : is_bedrock_be(ax, y, az, be_seed_lo, be_seed_hi, threshold);
                     if (isB != (kc[i].v == 1)) { ok = false; break; }
                 }
                 if (ok) {
@@ -371,7 +487,7 @@ int main(void) {
     printf("Finished in %.2fs   (%.2f M anchors/sec)\n",
            dt, dt > 0 ? scanned / dt / 1e6 : 0.0);
 
-    /* 9) sort & print */
+    /* 10) sort & print */
     qsort(top.a, top.n, sizeof(Hit), hit_cmp);
     printf("Kept %d closest hits:\n\n", top.n);
     printf("    %-8s %-8s %-3s %-10s\n", "X", "Z", "O", "DIST");
