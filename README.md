@@ -11,7 +11,7 @@ Built by **Batthepig**.
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Getting the Code](#getting-the-code)
+2. [Getting the File](#getting-the-file)
 3. [Building](#building)
 4. [Running](#running)
 5. [Step-by-Step Usage Guide](#step-by-step-usage-guide)
@@ -23,52 +23,47 @@ Built by **Batthepig**.
 
 ## Prerequisites
 
-You need a C11 compiler and git. Make is optional but recommended.
+You only need a C11 compiler — no git required.
 
-| Platform | Command |
+| Platform | Install |
 |---|---|
-| Ubuntu / Debian | `sudo apt install git clang make` |
-| Fedora / RHEL | `sudo dnf install git clang make` |
-| Arch Linux | `sudo pacman -S git clang make` |
+| Ubuntu / Debian | `sudo apt install clang` |
+| Fedora / RHEL | `sudo dnf install clang` |
+| Arch Linux | `sudo pacman -S clang` |
 | macOS | `xcode-select --install` |
-| iPhone — a-Shell | clang and make are built-in; `pkg install git` for git |
+| iPhone — a-Shell | clang is built-in, nothing to install |
 | Windows | Install [WSL](https://learn.microsoft.com/en-us/windows/wsl/), then follow Ubuntu steps |
 
 ---
 
-## Getting the Code
+## Getting the File
+
+No git needed. Download the single source file directly:
+
+### With curl
 
 ```sh
-git clone https://github.com/batthepig-two/Ibedrockfinder.git
-cd Ibedrockfinder
+curl -O https://raw.githubusercontent.com/batthepig-two/Ibedrockfinder/main/ibedrockfinder.c
+```
+
+### With wget
+
+```sh
+wget https://raw.githubusercontent.com/batthepig-two/Ibedrockfinder/main/ibedrockfinder.c
 ```
 
 ---
 
 ## Building
 
-### With make (recommended)
-
-```sh
-make
-```
-
-### Manual — clang
-
 ```sh
 clang -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c -lm
 ```
 
-### Manual — gcc
+Or with gcc:
 
 ```sh
 gcc -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c -lm
-```
-
-### Clean and rebuild
-
-```sh
-make clean && make
 ```
 
 ---
@@ -251,25 +246,20 @@ the pattern. The closest hit to your known location is usually the correct one.
 
 ### a-Shell (iPhone / iPad)
 
-a-Shell includes clang and make. Install git with:
+a-Shell includes clang. Download the file and build:
 
 ```sh
-pkg install git
+curl -O https://raw.githubusercontent.com/batthepig-two/Ibedrockfinder/main/ibedrockfinder.c
+clang -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c -lm
+./ibedrockfinder
 ```
-
-Then clone and build normally. The binary runs fully on-device with no internet
-connection required during scanning.
 
 ### macOS
 
-If `clang` is not found after installing Xcode Command Line Tools, try:
-
-```sh
-xcode-select --install
-```
+If `clang` is not found, run `xcode-select --install` first.
 
 ### Windows (WSL)
 
 1. Open PowerShell as Administrator and run `wsl --install`, then restart.
 2. Open the Ubuntu app.
-3. Follow the Ubuntu / Debian steps in Prerequisites above.
+3. Run `sudo apt install clang`, then follow the curl download and build steps above.
