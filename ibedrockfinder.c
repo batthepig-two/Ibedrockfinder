@@ -8,25 +8,14 @@
  * Run:
  *     ./ibedrockfinder
  *
- * Algorithms:
+ * Algorithm:
  *
  *   Java Edition 1.18+   — REAL world-gen algorithm.
  *     Uses Mojang's xoroshiro128++ XoroshiroPositionalRandomFactory
  *     derived from the world seed XORed with the MD5 of the salt
  *     "minecraft:bedrock_floor" / "minecraft:bedrock_roof", combined
- *     with the standard Mth.getSeed(x, y, z) position mixer.  Constants
- *     and seed pipeline match the cubiomes reference library, so hits
- *     should match what you actually see in your Java world.
- *
- *   Bedrock Edition       — APPROXIMATE.
- *     Mojang has not published the C++ Bedrock Edition world-gen code,
- *     and there is no community-reverse-engineered reference of the same
- *     quality as cubiomes.  This program uses a fast 64-bit-seed-mixed
- *     positional hash with the same per-layer probabilities (5/5, 4/5,
- *     3/5, 2/5, 1/5).  The pattern statistics (frequency of any given
- *     shape) match the real game, but exact coordinates of any specific
- *     hit will NOT match a Bedrock Edition world.  Use Java mode for
- *     coordinate-accurate searches.
+ *     with the standard Mth.getSeed(x, y, z) position mixer.  Hits
+ *     match what you actually see in your Java world.
  */
 
 #define _GNU_SOURCE
@@ -138,25 +127,6 @@ static inline bool is_bedrock_java(uint64_t f_lo, uint64_t f_hi,
     xr.hi = f_hi;
     uint32_t top24 = (uint32_t)(xoro_next(&xr) >> 40);
     return top24 < threshold24;
-}
-
-/* ============================================================ */
-/*  Bedrock Edition — approximate (see file header)             */
-/* ============================================================ */
-static inline bool is_bedrock_be(int32_t x, int32_t y, int32_t z,
-                                 uint32_t seed_lo, uint32_t seed_hi,
-                                 uint32_t threshold24) {
-    uint32_t h = (uint32_t)x * 0x85ebca6bu;
-    h ^= (uint32_t)z * 0xc2b2ae35u;
-    h ^= (uint32_t)y * 0x27d4eb2fu;
-    h ^= seed_lo;
-    h ^= h >> 16;
-    h *= 0x7feb352du;
-    h ^= seed_hi;
-    h ^= h >> 15;
-    h *= 0x846ca68bu;
-    h ^= h >> 16;
-    return (h & 0xffffffu) < threshold24;
 }
 
 /* ============================================================ */
@@ -318,8 +288,7 @@ int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     printf("=== Ibedrockfinder ===  single-file C bedrock pattern finder\n");
     printf("    by Batthepig                                              \n");
-    printf("    Java mode = real Mojang xoroshiro128++ + bedrock-salt MD5\n");
-    printf("    Bedrock Edition mode = approximate (see source header)   \n\n");
+    printf("    Java Edition 1.18+ — real Mojang xoroshiro128++ RNG      \n\n");
 
     /* 1) Y level + dimension first (Y is what you see on F3 in-game) */
     int y = prompt_int("Y level", -60);
@@ -336,11 +305,8 @@ int main(void) {
     base.h = prompt_int("Pattern length (Z size)", 16);
     read_pattern_rows(&base);
 
-    /* 3) edition + seed (both editions are seed-dependent now) */
-    char edS[16];
-    prompt_str("\nEdition (java/bedrock)", "java", edS, sizeof edS);
-    int edition = (!strcmp(edS, "bedrock") || !strcmp(edS, "b")) ? 1 : 0;
-    int64_t seed = prompt_i64("World seed", 0);
+    /* 3) seed */
+    int64_t seed = prompt_i64("\nWorld seed", 0);
 
     /* 4) area */
     int cx = prompt_int("Center X", 0);
@@ -383,25 +349,20 @@ int main(void) {
     }
     for (int i = 0; i < nv; i++) build_known(&variants[i], pB);
 
-    /* 7) precompute edition-specific PRNG state from seed */
-    uint64_t java_f_lo = 0, java_f_hi = 0;
-    if (edition == 0) {
-        uint64_t world_lo, world_hi;
-        java_world_factory((uint64_t)seed, &world_lo, &world_hi);
-        /* dim 2 (nether ceiling) uses bedrock_roof; floors use bedrock_floor */
-        if (dim == 2) {
-            java_apply_salt(world_lo, world_hi,
-                            MD5_BEDROCK_ROOF_LO, MD5_BEDROCK_ROOF_HI,
-                            &java_f_lo, &java_f_hi);
-        } else {
-            java_apply_salt(world_lo, world_hi,
-                            MD5_BEDROCK_FLOOR_LO, MD5_BEDROCK_FLOOR_HI,
-                            &java_f_lo, &java_f_hi);
-        }
+    /* 7) precompute PRNG state from seed */
+    uint64_t world_lo, world_hi;
+    java_world_factory((uint64_t)seed, &world_lo, &world_hi);
+    uint64_t java_f_lo, java_f_hi;
+    /* dim 2 (nether ceiling) uses bedrock_roof; floors use bedrock_floor */
+    if (dim == 2) {
+        java_apply_salt(world_lo, world_hi,
+                        MD5_BEDROCK_ROOF_LO, MD5_BEDROCK_ROOF_HI,
+                        &java_f_lo, &java_f_hi);
+    } else {
+        java_apply_salt(world_lo, world_hi,
+                        MD5_BEDROCK_FLOOR_LO, MD5_BEDROCK_FLOOR_HI,
+                        &java_f_lo, &java_f_hi);
     }
-    uint32_t be_seed_lo = (uint32_t)((uint64_t)seed & 0xffffffffu);
-    uint32_t be_seed_hi = (uint32_t)(((uint64_t)seed >> 32) & 0xffffffffu);
-
     int x_min = cx - radius, x_max = cx + radius;
     int z_min = cz - radius, z_max = cz + radius;
 
@@ -416,14 +377,10 @@ int main(void) {
         total_anchors += xr * zr;
     }
 
-    printf("\n%s mode | seed %lld | dim %s | Y %d (layer %s) | %lld anchors x %d orient(s)\n",
-           edition == 0 ? "Java (real PRNG)" : "Bedrock Edition (approximate)",
+    printf("\nJava Edition | seed %lld | dim %s | Y %d (layer %s) | %lld anchors x %d orient(s)\n",
            (long long)seed, dimS, y,
            always_b ? "0 always-bedrock" : never_b ? "out-of-range" : "valid",
            (long long)total_anchors, nv);
-    if (edition == 1) {
-        printf("Note: Bedrock Edition results are pattern-statistical, not coordinate-exact.\n");
-    }
     printf("\n");
     fflush(stdout);
 
@@ -448,9 +405,7 @@ int main(void) {
                 bool ok = true;
                 for (int i = 0; i < n; i++) {
                     int ax = x + kc[i].dx, az = z + kc[i].dz;
-                    bool isB = (edition == 0)
-                        ? is_bedrock_java(java_f_lo, java_f_hi, ax, y, az, threshold)
-                        : is_bedrock_be(ax, y, az, be_seed_lo, be_seed_hi, threshold);
+                    bool isB = is_bedrock_java(java_f_lo, java_f_hi, ax, y, az, threshold);
                     if (isB != (kc[i].v == 1)) { ok = false; break; }
                 }
                 if (ok) {
