@@ -31,14 +31,13 @@
 
 #define _GNU_SOURCE
 #include <ctype.h>
-#include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "cubiomes/rng.h"
 
 #define MAX_PATTERN  32
 #define MAX_KNOWN    (MAX_PATTERN * MAX_PATTERN)
@@ -59,41 +58,13 @@
 #define MD5_BEDROCK_ROOF_LO   0x8ebd4a1d131d71ccULL
 #define MD5_BEDROCK_ROOF_HI   0xc984cfbb684a26c4ULL
 
-typedef struct { uint64_t lo, hi; } Xoro;
+/* xoroshiro128++ types and functions are provided by cubiomes/rng.h:
+ *   Xoroshiro  — struct with .lo, .hi (u64)
+ *   xSetSeed(&xr, seed)   — Stafford13-mixed constructor (matches Mojang)
+ *   xNextLong(&xr)        — xoroshiro128++ next u64
+ *   rotl64(x, b)          — 64-bit left-rotate
+ * These are identical to Mojang's XoroshiroRandomSource. */
 
-static inline uint64_t rotl64(uint64_t x, int b) {
-    return (x << b) | (x >> (64 - b));
-}
-
-/* Xoroshiro128++ seeded constructor with stafford13 mix
- * (matches Mojang's XoroshiroRandomSource(long) constructor and
- *  cubiomes' xSetSeed in rng.h). */
-static inline void xoro_seed(Xoro *xr, uint64_t value) {
-    const uint64_t XL = 0x9e3779b97f4a7c15ULL;
-    const uint64_t XH = 0x6a09e667f3bcc909ULL;
-    const uint64_t A  = 0xbf58476d1ce4e5b9ULL;
-    const uint64_t B  = 0x94d049bb133111ebULL;
-    uint64_t l = value ^ XH;
-    uint64_t h = l + XL;
-    l = (l ^ (l >> 30)) * A;
-    h = (h ^ (h >> 30)) * A;
-    l = (l ^ (l >> 27)) * B;
-    h = (h ^ (h >> 27)) * B;
-    l = l ^ (l >> 31);
-    h = h ^ (h >> 31);
-    xr->lo = l;
-    xr->hi = h;
-}
-
-static inline uint64_t xoro_next(Xoro *xr) {
-    uint64_t l = xr->lo;
-    uint64_t h = xr->hi;
-    uint64_t n = rotl64(l + h, 17) + l;
-    h ^= l;
-    xr->lo = rotl64(l, 49) ^ h ^ (h << 21);
-    xr->hi = rotl64(h, 28);
-    return n;
-}
 
 /* Mojang's Mth.getSeed(x, y, z): coordinate hash used by every
  * XoroshiroPositionalRandom .at(x, y, z) call. */
@@ -112,10 +83,10 @@ static inline int64_t mc_get_pos_seed(int32_t x, int32_t y, int32_t z) {
  *      → (nextLong(), nextLong()) of that source. */
 static void java_world_factory(uint64_t world_seed,
                                uint64_t *out_lo, uint64_t *out_hi) {
-    Xoro xr;
-    xoro_seed(&xr, world_seed);
-    *out_lo = xoro_next(&xr);
-    *out_hi = xoro_next(&xr);
+    Xoroshiro xr;
+    xSetSeed(&xr, world_seed);
+    *out_lo = xNextLong(&xr);
+    *out_hi = xNextLong(&xr);
 }
 
 /* fromHashOf("minecraft:bedrock_floor") on a positional factory:
@@ -133,10 +104,10 @@ static inline void java_apply_salt(uint64_t world_lo, uint64_t world_hi,
 static inline bool is_bedrock_java(uint64_t f_lo, uint64_t f_hi,
                                    int32_t x, int32_t y, int32_t z,
                                    uint32_t threshold24) {
-    Xoro xr;
+    Xoroshiro xr;
     xr.lo = (uint64_t)mc_get_pos_seed(x, y, z) ^ f_lo;
     xr.hi = f_hi;
-    uint32_t top24 = (uint32_t)(xoro_next(&xr) >> 40);
+    uint32_t top24 = (uint32_t)(xNextLong(&xr) >> 40);
     return top24 < threshold24;
 }
 

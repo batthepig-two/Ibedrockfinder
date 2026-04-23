@@ -1,25 +1,42 @@
 # Ibedrockfinder
 
-Single-file C bedrock pattern finder for Minecraft, optimized for quick use in a-Shell on iPhone.
+  Single-file interactive Minecraft bedrock pattern finder, built for a-Shell on iPhone
+  (works on any POSIX terminal too).
 
-## Build
+  ## Features
 
-```sh
-clang -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c
-```
+  - **Java Edition 1.18+** — Real Mojang xoroshiro128++ positional RNG via [cubiomes](https://github.com/Cubitect/cubiomes).
+    Pattern locations match your actual Java world.
+  - **Bedrock Edition** — Approximate (same layer probabilities, not coordinate-exact).
+  - Pattern entry with wildcard cells (`?`), all 8 rotations/flips, top-N closest results.
 
-## Run
+  ## Build
 
-```sh
-./ibedrockfinder
-```
+  Requires a C11 compiler. Uses cubiomes (included as `cubiomes/`).
 
-## Notes
+  ### With make (recommended)
 
-- Java Edition mode implements the real 1.18+ xoroshiro128++ positional RNG path.
-- Bedrock Edition mode is clearly marked approximate (pattern-statistical, not coordinate-exact).
-- The scanner supports wildcards (`?`) and optional 8-orientation matching.
-- Not as accurate as cubiomes... yet. it will be implemented eventually
-## a-Shell Git push reminder
+  ```sh
+  make
+  ./ibedrockfinder
+  ```
 
-If pasting multiline commands in a-Shell collapses into one line, run one command at a time or separate commands with `;`.
+  ### Manual
+
+  ```sh
+  clang -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c cubiomes/util.c cubiomes/noise.c -lm
+  ./ibedrockfinder
+  ```
+
+  Or with GCC:
+
+  ```sh
+  gcc -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c cubiomes/util.c cubiomes/noise.c -lm
+  ./ibedrockfinder
+  ```
+
+  ## Credits
+
+  - Bedrock algorithm and tool by **Batthepig**
+  - RNG / xoroshiro128++ implementation from **[cubiomes](https://github.com/Cubitect/cubiomes)** by Cubitect (MIT)
+  
