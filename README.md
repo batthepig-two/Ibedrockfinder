@@ -1,8 +1,9 @@
-# Ibedrockfinder
+# Ibedrockfinder & Ibedrockseeder
 
-Interactive Minecraft Java Edition bedrock pattern finder for any POSIX terminal.
-Enter a pattern of bedrock blocks you observe in-game and it will scan your world
-seed to find all locations where that exact pattern appears.
+Two interactive Minecraft Java Edition tools for any POSIX terminal.
+
+- **Ibedrockfinder** — know your seed, find where a bedrock pattern is.
+- **Ibedrockseeder** — know your coordinates, find what your seed is.
 
 Built by **Batthepig**.
 
@@ -11,13 +12,19 @@ Built by **Batthepig**.
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Getting the File](#getting-the-file)
-3. [Building](#building)
-4. [Running](#running)
-5. [Step-by-Step Usage Guide](#step-by-step-usage-guide)
-6. [Pattern Input Reference](#pattern-input-reference)
-7. [Understanding Results](#understanding-results)
-8. [Platform Notes](#platform-notes)
+2. [Ibedrockfinder](#ibedrockfinder)
+   - [Get and Build](#get-and-build)
+   - [Running](#running)
+   - [Step-by-Step Usage](#step-by-step-usage)
+   - [Pattern Input Reference](#pattern-input-reference)
+   - [Understanding Results](#understanding-results)
+3. [Ibedrockseeder](#ibedrockseeder)
+   - [Get and Build](#get-and-build-1)
+   - [Running](#running-1)
+   - [Step-by-Step Usage](#step-by-step-usage-1)
+   - [Understanding Results](#understanding-results-1)
+   - [Search Speed Guide](#search-speed-guide)
+4. [Platform Notes](#platform-notes)
 
 ---
 
@@ -36,25 +43,25 @@ You only need a C11 compiler — no git required.
 
 ---
 
-## Getting the File
+## Ibedrockfinder
 
-No git needed. Download the single source file directly:
+**You know your seed. You want to find where a bedrock pattern is in the world.**
 
-### With curl
+### Get and Build
+
+Download the single source file directly — no git needed:
 
 ```sh
 curl -O https://raw.githubusercontent.com/batthepig-two/Ibedrockfinder/main/ibedrockfinder.c
 ```
 
-### With wget
+Or with wget:
 
 ```sh
 wget https://raw.githubusercontent.com/batthepig-two/Ibedrockfinder/main/ibedrockfinder.c
 ```
 
----
-
-## Building
+Build:
 
 ```sh
 clang -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c -lm
@@ -66,29 +73,25 @@ Or with gcc:
 gcc -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c -lm
 ```
 
----
-
-## Running
+### Running
 
 ```sh
 ./ibedrockfinder
 ```
 
-The program is fully interactive. It will prompt you for each input one at a time.
-Press **Enter** at any prompt to accept the default shown in brackets.
+The program is fully interactive. Press **Enter** at any prompt to accept the default shown in brackets.
 
 ---
 
-## Step-by-Step Usage Guide
+### Step-by-Step Usage
 
-### Step 1 — Y level
+#### Step 1 — Y level
 
 ```
 Y level [-60]:
 ```
 
-Enter the Y coordinate of the bedrock layer you are looking at.
-You can see your current Y coordinate in the F3 debug screen in-game.
+Enter the Y coordinate of the bedrock layer you are looking at (from F3 in-game).
 
 Valid Y ranges per dimension:
 
@@ -98,45 +101,38 @@ Valid Y ranges per dimension:
 | Nether floor | 0 to 4 | Y 0 is always bedrock |
 | Nether ceiling | 123 to 127 | Y 127 is always bedrock |
 
-The best Y levels to search are the middle ones (-62, -61, 2, 3, 124, 125) because
-they have a mix of bedrock and non-bedrock blocks, making patterns more distinctive.
+The best Y levels to search are the middle ones (-62, -61, 2, 3, 124, 125) — they have a roughly 50/50 mix of bedrock and stone, making your pattern more distinctive.
 
 ---
 
-### Step 2 — Dimension
+#### Step 2 — Dimension
 
 ```
 Dimension (overworld_floor/nether_floor/nether_ceiling) [overworld_floor]:
 ```
 
-Type one of:
-
-- `overworld_floor`
-- `nether_floor`
-- `nether_ceiling`
+Type one of: `overworld_floor`, `nether_floor`, `nether_ceiling`
 
 ---
 
-### Step 3 — Pattern size
+#### Step 3 — Pattern size
 
 ```
 Pattern width  (X size) [2]:
 Pattern length (Z size) [16]:
 ```
 
-Enter the width (X direction) and length (Z direction) of the rectangular area you
-observed. Maximum 32 in each direction. A larger, more detailed pattern produces
-fewer false positives and narrows down results faster.
+Width is the X direction, length is the Z direction. Maximum 32 in each direction. A larger, more detailed pattern gives fewer false positives.
 
 ---
 
-### Step 4 — Pattern rows
+#### Step 4 — Pattern rows
 
 ```
 Enter 16 row(s) of width 2.  '1'=bedrock, '0'=stone, '?'=unknown.
 ```
 
-Type each row from north to south (increasing Z). Accepted characters:
+Type each row from north to south (increasing Z):
 
 | Input | Meaning |
 |---|---|
@@ -144,32 +140,21 @@ Type each row from north to south (increasing Z). Accepted characters:
 | `0` `.` `S` `s` | Non-bedrock (stone, air, etc.) |
 | `?` | Unknown — skip this cell |
 
-Spaces are ignored. Short rows are padded with `?` automatically.
-Press Enter alone to make an entire row unknown.
-
-**Example** — 2 wide, first row has bedrock on the left and non-bedrock on
-the right, second row is unknown:
-
-```
-row  0: 10
-row  1:
-```
+Spaces are ignored. Short rows are padded with `?`. Press Enter alone for an all-unknown row.
 
 ---
 
-### Step 5 — World seed
+#### Step 5 — World seed
 
 ```
 World seed [0]:
 ```
 
-Enter your Java Edition world seed as a number (can be negative).
-
-To find your seed: run `/seed` in-game (requires cheats or op permission).
+Enter your Java Edition world seed. Find it with `/seed` in-game (requires cheats or op).
 
 ---
 
-### Step 6 — Search area
+#### Step 6 — Search area
 
 ```
 Center X [0]:
@@ -177,28 +162,22 @@ Center Z [0]:
 Radius (blocks) [5000]:
 ```
 
-Set the center point of the search and how far out to scan. A 5000-block radius
-usually completes in a few seconds. Increase the radius if you expect the pattern
-to be further from the center.
+Center your search on where you think you are and set the radius. A 5,000-block radius completes in seconds. The fewer results you get, the better — try a small radius first if you know roughly where you are.
 
 ---
 
-### Step 7 — Options
+#### Step 7 — Options
 
 ```
 Match all 8 rotations? (1=yes, 0=no) [1]:
 Max results to keep (closest first) [200]:
 ```
 
-- **Rotations** — tests all 4 rotations and 2 mirror flips of your pattern.
-  Leave this on unless your pattern is clearly asymmetric and you know its
-  exact in-game orientation.
-- **Max results** — how many of the closest matches to keep. Hits beyond
-  this count are dropped as the scan runs.
+Rotations tests all 4 rotations and 2 mirror flips of your pattern. Leave it on unless you know the exact orientation.
 
 ---
 
-## Pattern Input Reference
+### Pattern Input Reference
 
 ```
 1  #  B  b  →  bedrock
@@ -206,39 +185,147 @@ Max results to keep (closest first) [200]:
 ?            →  unknown / wildcard
 ```
 
-**Tips for a good pattern:**
+**Tips:**
 
-- Use a Y level in the middle of the bedrock range (e.g. Y=-62 in the overworld)
-  where blocks are roughly 50/50 — more contrast means more unique patterns.
-- Avoid the top and bottom layers — Y=-64 and Y=-59 have no variation.
+- Use Y=-62 or Y=-61 (overworld) for best pattern quality — more bedrock variation.
+- Avoid Y=-64 and Y=-60: the extreme layers have almost no variation.
 - A 3×6 or 2×10 area is usually specific enough to get under 5 results.
-- Use `?` freely for cells you did not observe. Unknown cells are skipped and
-  do not cause wrong results — they only make the pattern less specific.
+- Use `?` freely for cells you could not see clearly.
 
 ---
 
-## Understanding Results
-
-After the scan finishes:
+### Understanding Results
 
 ```
 Kept N closest hits:
 
     X        Z        O   DIST
     -------- -------- --- ----------
-    -512     208      0   560.3
-    1024     -96      2   1028.5
+    -441     -827     4   937.2
+    1871     -870     3   2063.4
 ```
 
 | Column | Meaning |
 |---|---|
 | **X** | Block X coordinate of the north-west corner of the matched pattern |
 | **Z** | Block Z coordinate of the north-west corner of the matched pattern |
-| **O** | Orientation index (0–7), representing which of the 8 rotations/flips matched |
+| **O** | Orientation index (0–7) — which of the 8 rotations/flips matched |
 | **DIST** | Distance in blocks from your chosen search center |
 
-Go to the reported (X, Z) in your world at the Y level you searched and compare
-the pattern. The closest hit to your known location is usually the correct one.
+The closest hit to where you think you are is almost always the correct one. Go to that (X, Z) in-game and compare.
+
+---
+
+## Ibedrockseeder
+
+**You know your coordinates. You want to find your world seed.**
+
+This tool is the reverse of Ibedrockfinder. Instead of scanning locations for a known seed, it scans seeds for a known location. You must know the **exact absolute block coordinates** of each block in your pattern — read them directly off the F3 screen while standing next to each block.
+
+### Get and Build
+
+```sh
+curl -O https://raw.githubusercontent.com/batthepig-two/Ibedrockfinder/main/ibedrockseeder.c
+```
+
+Or with wget:
+
+```sh
+wget https://raw.githubusercontent.com/batthepig-two/Ibedrockfinder/main/ibedrockseeder.c
+```
+
+Build:
+
+```sh
+clang -O3 -std=c11 -o ibedrockseeder ibedrockseeder.c -lm
+```
+
+Or with gcc:
+
+```sh
+gcc -O3 -std=c11 -o ibedrockseeder ibedrockseeder.c -lm
+```
+
+### Running
+
+```sh
+./ibedrockseeder
+```
+
+---
+
+### Step-by-Step Usage
+
+#### Step 1 — Y level and dimension
+
+Same as Ibedrockfinder. Use a middle layer (Y=-62 or Y=-61 in the overworld) for best results.
+
+#### Step 2 — Pattern origin
+
+```
+Origin X [0]:
+Origin Z [0]:
+```
+
+The absolute block coordinates of the **top-left (north-west) corner** of your pattern — the block with the smallest X and smallest Z. Stand on it in-game and read X, Z from F3.
+
+#### Step 3 — Pattern size and rows
+
+```
+Pattern width  (X blocks) [4]:
+Pattern height (Z blocks) [4]:
+```
+
+Same row input as Ibedrockfinder. Use `1`/`b` for bedrock, `0`/`s` for stone, `?` to skip.
+
+**Important:** every cell you mark as bedrock or stone must be accurate. A single wrong cell will silently exclude your real seed and include wrong ones. If unsure about a block, use `?`.
+
+#### Step 4 — Seed search range
+
+```
+Seed range start [-2147483648]:
+Seed range end   [2147483647]:
+```
+
+The tool searches every integer seed in this range and reports any that match your pattern. The default is the full 32-bit signed integer space (about 4 billion seeds).
+
+See [Search Speed Guide](#search-speed-guide) to understand what range makes sense for your situation.
+
+---
+
+### Understanding Results
+
+```
+Matching seed(s):
+
+  -27494042902671370001
+```
+
+Each number is a world seed that would produce exactly the bedrock/stone cells you described at those coordinates. Verify with `/seed` in-game.
+
+If you get **multiple results**, add more known cells to narrow it down — the more blocks you describe, the rarer the pattern and the fewer false positives.
+
+If you get **no results**, check:
+- Are the X, Y, Z coordinates exactly right? (re-read F3)
+- Did you confuse bedrock and stone?
+- Is the Y level in the valid bedrock range for your dimension?
+- Is your seed outside the searched range?
+
+---
+
+### Search Speed Guide
+
+Typical speed: **150 – 350 million seeds per second**.
+
+| Situation | Recommended range | Approximate time |
+|---|---|---|
+| You typed a number you roughly remember | ±a few billion around your guess | Seconds |
+| You know it was a small number | -10 million to +10 million | Under 1 second |
+| Full 32-bit range (default) | -2,147,483,648 to 2,147,483,647 | ~15 seconds |
+| Full 33-bit range | -4 billion to +4 billion | ~30 seconds |
+| Full random-seed space (2^48) | -140 trillion to +140 trillion | Many hours |
+
+A more distinctive pattern (more known cells, especially bedrock cells at Y=-62) means mismatches are caught after checking just 1–2 blocks per seed, making the search faster even for the same range.
 
 ---
 
@@ -246,13 +333,15 @@ the pattern. The closest hit to your known location is usually the correct one.
 
 ### a-Shell (iPhone / iPad)
 
-a-Shell includes clang. Download the file and build:
+a-Shell includes clang. Download and build in the terminal:
 
 ```sh
 curl -O https://raw.githubusercontent.com/batthepig-two/Ibedrockfinder/main/ibedrockfinder.c
 clang -O3 -std=c11 -o ibedrockfinder ibedrockfinder.c -lm
 ./ibedrockfinder
 ```
+
+Same steps for ibedrockseeder — just change the filename.
 
 ### macOS
 
