@@ -283,8 +283,8 @@ Same row input as Ibedrockfinder. Use `1`/`b` for bedrock, `0`/`s` for stone, `?
 #### Step 4 — Seed search range
 
 ```
-Seed range start [-2147483648]:
-Seed range end   [2147483647]:
+Seed range start [-140737488355328]:
+Seed range end   [140737488355327]:
 ```
 
 The tool searches every integer seed in this range and reports any that match your pattern. The default is the full 32-bit signed integer space (about 4 billion seeds).
@@ -321,9 +321,8 @@ Typical speed: **150 – 350 million seeds per second**.
 |---|---|---|
 | You typed a number you roughly remember | ±a few billion around your guess | Seconds |
 | You know it was a small number | -10 million to +10 million | Under 1 second |
-| Full 32-bit range (default) | -2,147,483,648 to 2,147,483,647 | ~15 seconds |
-| Full 33-bit range | -4 billion to +4 billion | ~30 seconds |
-| Full random-seed space (2^48) | -140 trillion to +140 trillion | Many hours |
+| Full 32-bit range | -2,147,483,648 to 2,147,483,647 | ~15 seconds |
+| Full random-seed space (2^48, **default**) | -140,737,488,355,328 to 140,737,488,355,327 | Many hours |
 
 A more distinctive pattern (more known cells, especially bedrock cells at Y=-62) means mismatches are caught after checking just 1–2 blocks per seed, making the search faster even for the same range.
 

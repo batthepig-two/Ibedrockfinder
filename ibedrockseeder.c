@@ -243,11 +243,10 @@ int main(void) {
 
     /* --- 4. Seed search range --- */
     printf("\n--- Seed search range ---\n");
-    printf("At ~200 M seeds/sec, 4 billion seeds (32-bit range) takes ~20 s.\n");
-    printf("If your seed was random (not typed), the full 48-bit space is\n");
-    printf("~281 trillion seeds — that would take many hours.\n\n");
-    int64_t seed_start = prompt_i64("Seed range start", -2147483648LL);
-    int64_t seed_end   = prompt_i64("Seed range end",    2147483647LL);
+    printf("At ~200 M seeds/sec, the default 48-bit range (~281 trillion seeds)\n");
+    printf("takes many hours. Narrow it if you know roughly what your seed is.\n\n");
+    int64_t seed_start = prompt_i64("Seed range start", -140737488355328LL);
+    int64_t seed_end   = prompt_i64("Seed range end",    140737488355327LL);
     if (seed_end < seed_start) {
         int64_t t = seed_start; seed_start = seed_end; seed_end = t;
     }
